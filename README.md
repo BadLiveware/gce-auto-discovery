@@ -1,80 +1,58 @@
-# example
+# gce_auto_discovery
+This is a coredns plugin to auto discover GCE instances and template dns records based on data about the instances
 
 ## Name
 
-*example* - prints "example" after a query is handled.
+*gce_auto_discovery* - enables serving templated dns records from gcp compute instances
 
 ## Description
 
-The example plugin prints "example" on every query that got handled by the server. It serves as
-documentation for writing CoreDNS plugins.
+The *gce_auto_discovery* plugin is useful for convention over configuration when using host records, or transitioning from using the gcp internal DNS to a custom DNS solution.
 
-## Compilation
-
-This package will always be compiled as part of CoreDNS and not in a standalone way. It will require you to use `go get` or as a dependency on [plugin.cfg](https://github.com/coredns/coredns/blob/master/plugin.cfg).
-
-The [manual](https://coredns.io/manual/toc/#what-is-coredns) will have more information about how to configure and extend the server with external plugins.
-
-A simple way to consume this plugin, is by adding the following on [plugin.cfg](https://github.com/coredns/coredns/blob/master/plugin.cfg), and recompile it as [detailed on coredns.io](https://coredns.io/2017/07/25/compile-time-enabling-or-disabling-plugins/#build-with-compile-time-configuration-file).
-
-~~~
-example:github.com/coredns/example
-~~~
-
-Put this early in the plugin list, so that *example* is executed before any of the other plugins.
-
-After this you can compile coredns by:
-
-``` sh
-go generate
-go build
-```
-
-Or you can instead use make:
-
-``` sh
-make
-```
 
 ## Syntax
 
 ~~~ txt
-example
+gce_auto_discovery  {
+    template    <Go template string>
+    project     <A gcp project>
+    credentials [FILENAME]
+    fallthrough [ZONES...]
+}
 ~~~
 
-## Metrics
+*   **TEMPLATE** A go template string(including sprig functions) to use for templating DNS records for compute instances
 
-If monitoring is enabled (via the *prometheus* directive) the following metric is exported:
+*   **PROJECT** the project ID of the Google Cloud project.
 
-* `coredns_example_request_count_total{server}` - query count to the *example* plugin.
+*   `credentials` is used for reading the credential file from **FILENAME** (normally a .json file).
+    This field is optional. If this field is not provided then authentication will be done automatically,
+    e.g., through environmental variable `GOOGLE_APPLICATION_CREDENTIALS`. Please see
+    Google Cloud's [authentication method](https://cloud.google.com/docs/authentication) for more details.
 
-The `server` label indicated which server handled the request, see the *metrics* plugin for details.
-
-## Ready
-
-This plugin reports readiness to the ready plugin. It will be immediately ready.
+*   `fallthrough` If zone matches and no record can be generated, pass request to the next plugin.
+    If **[ZONES...]** is omitted, then fallthrough happens for all zones for which the plugin is
+    authoritative. If specific zones are listed (for example `in-addr.arpa` and `ip6.arpa`), then
+    only queries for those zones will be subject to fallthrough.
 
 ## Examples
 
-In this configuration, we forward all queries to 9.9.9.9 and print "example" whenever we receive
-a query.
+Enable clouddns with implicit GCP credentials and resolve CNAMEs via 10.0.0.1:
 
-~~~ corefile
+~~~ txt
 . {
-  forward . 9.9.9.9
-  example
+    gce_auto_discovery {
+        template "{{ .Name }}.{{ .Project }}.example.org."
+    }
+    forward . 10.0.0.1
 }
 ~~~
 
-Or without any external connectivity:
-
-~~~ corefile
-. {
-  whoami
-  example
+Mimic googles internal DNS with an option to override the .Name property with a label on the compute instance
+~~~ txt
+.internal {
+    gce_auto_discovery {
+        template "{{ .Labels.dns | default .Name }}.{{ .Zone }}.c.{{ .Project }}.internal."
+    }
 }
 ~~~
-
-## Also See
-
-See the [manual](https://coredns.io/manual).
